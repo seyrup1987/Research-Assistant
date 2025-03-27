@@ -1,0 +1,8 @@
+Decompose the following text into clear and simple propositions. Follow these strict rules:
+1. Split every compound sentence into separate simple sentences, preserving the original phrasing from the text whenever possible.
+2. For any named entity (e.g., person, place, organization) with additional descriptive information, create a separate proposition for that information.
+3. Contextualize each proposition by adding necessary text blocks or entire sentences from the input and replacing pronouns (e.g., "it", "he", "she", "they", "this", "that") with the full name of the entities they refer to.
+4. Present the results as a numbered list of strings, where each string is a proposition that can be understood independently without relying on other propositions.
+5. Do not summarize the text; extract propositions that are fully interpretable and contain sufficient context.
+
+Text:
