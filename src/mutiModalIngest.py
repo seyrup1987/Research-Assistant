@@ -23,6 +23,8 @@ OUTPUT_PATH = os.path.join("output", "temp")
 DATA_PATH = os.path.join('..', 'Data')
 CHECK_INTERVAL = 10
 PROMPT_PATH = os.path.join('..', 'config', 'prompt4propositions.txt')
+IMAGE_PROMPT_PATH = os.path.join('..', 'config', 'prompt4ImageSumNProp.txt')
+TABLE_PROMPT_PATH = os.path.join('..', 'config', 'prompt4TableSumNProp.txt')
 
 # Initialize Models
 embeddings = Models().embeddings
@@ -82,16 +84,17 @@ def summerizeImages(images):
                 if interrupted:
                     logging.warning("Stopping text extraction due to interrupt.")
                     break
+                
+                propositions = []
+                with open(IMAGE_PROMPT_PATH, 'r') as promptFile:
+                    prompt = promptFile.read()
+                
+                logging.info("Extracting Propositions from Image Summary . . .")
+
+
                 # Decode Base64 to image
                 img_data = base64.b64decode(img_b64)
                 img = Image.open(BytesIO(img_data))
-
-                # LLaVA-inspired prompt for summarization
-                prompt = (
-                    "Analyze this image and provide a concise summary of its content and a short succinct context that will be situated as part of the summary for the purpose of improving search retrieval of the chunk. "
-                    "Focus on key visual elements, such as objects, text, or patterns."
-                    "Answer only with a succinct context and nothing else."
-                )
 
                 messages = [
                     HumanMessage(
@@ -106,6 +109,7 @@ def summerizeImages(images):
                 response = model.invoke(messages)
                 del response.response_metadata['message']
                 logging.debug(f"Successfully summarized image: {response.content.strip()}")
+                print("DEBUG LOG | Response: ", response.content.strip())
                 return Document(
                     page_content = response.content.strip(),
                     metadata = response.response_metadata
@@ -147,21 +151,22 @@ def summerizeTables(tables):
                     logging.warning("Stopping text extraction due to interrupt.")
                     break
 
-                prompt = (
-                    "Analyze this table and provide a concise summary of its contents and a short succinct context that will be situated as part of the summary for the purpose of improving search retrieval of the chunk. "
-                    "Focus on key row elements."
-                    "Answer only with a succinct context and nothing else."
-                )
-
+                propositions = []
+                with open(TABLE_PROMPT_PATH, 'r') as promptFile:
+                    prompt = promptFile.read()
+                
+                logging.info("Extracting Proposition from Table SUmmary . . .")
+                full_prompt = f"{prompt}{table}"
                 messages = [
                     HumanMessage(
-                        content=f"{prompt}\n\nTable content:\n{table}"
+                        content=full_prompt
                     )
                 ]
 
                 # Invoke the model
                 response = model.invoke(messages)
                 logging.debug(f"Successfully summarized table: {response.content.strip()}")
+                print("DEBUG LOG | Response: ", response.content.strip())
                 del response.response_metadata['message']
                 return Document(
                     page_content = response.content.strip(),
@@ -217,14 +222,14 @@ def process_text(chunks):
         if interrupted:
             logging.warning("Stopping text extraction due to interrupt.")
             break
-        if "CompositeElement" in str(type(chunk)):
+        chunk_type = str(type(chunk))
+        if any(t in chunk_type for t in ["CompositeElement", "Text", "NarrativeText", "Title"]):
             texts.append(str(chunk))
     
     complete_text = ' '.join(texts)
+    logging.info(f"Extracted text: {complete_text[:500]}...")
     processed_chunks = text_splitter.split_text(complete_text)
-    logging.info(f"Number of Text chunks : {len(processed_chunks)}")
-
-    logging.info(f"Extracting Propositions from Chunked Text Blocks")
+    logging.info(f"Number of Text chunks: {len(processed_chunks)}")
     propositions = getPropositions4mText(processed_chunks)
     return propositions
 
@@ -246,7 +251,7 @@ def getPropositions4mText(chunks):
             
             # Invoke the model
             response = model.invoke(messages)
-            
+            print("DEBUG LOG | Response: ", response.content.strip())
             # Handle the response content
             prop_lines = response.content.strip().split('\n')
             for line in prop_lines:
@@ -284,7 +289,10 @@ def partitionAndSummerizePDF(file_path):
         chunking_strategy='by_title',
         max_character=1000,
         combine_text_under_n_chars=500,
-        new_after_n_chars=6000
+        new_after_n_chars=6000,
+        extract_images_in_pdf=True,  # Ensure images are extracted
+        use_ocr=True,  # Enable OCR
+        ocr_languages="eng"  # Specify language
     )
 
     images = get_images_base64(chunks)
